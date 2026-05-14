@@ -1,93 +1,3 @@
-local function poll_starting_modifier(index, kind)
-    local seed_key = "loz_enhanced_" .. kind .. "_" .. index
-
-    if kind == "enh" and SMODS and SMODS.poll_enhancement then
-        return SMODS.poll_enhancement({ key = seed_key, guaranteed = true })
-    end
-
-    if kind == "seal" and SMODS and SMODS.poll_seal then
-        return SMODS.poll_seal({ key = seed_key, guaranteed = true })
-    end
-
-    if kind == "edition" then
-        if SMODS and SMODS.poll_edition then
-            return SMODS.poll_edition({ key = seed_key, guaranteed = true, no_negative = true })
-        end
-        if poll_edition then
-            return poll_edition(seed_key, nil, true, true)
-        end
-    end
-end
-
-local function enhanced_deck_run_active()
-    return G
-        and G.GAME
-        and G.GAME.modifiers
-        and G.GAME.modifiers.loz_enhanced_deck
-end
-
-local function consumables_locked()
-    return G
-        and G.GAME
-        and G.GAME.blind
-        and not G.GAME.blind.in_blind
-        and enhanced_deck_run_active()
-end
-
-local function is_consumable_card(card)
-    if not card then
-        return false
-    end
-
-    if card.area and G and G.consumeables and card.area == G.consumeables then
-        return true
-    end
-
-    local card_set = card.config and card.config.center and card.config.center.set
-    return (card.ability and card.ability.consumeable)
-        or (card_set and SMODS and SMODS.ConsumableTypes and SMODS.ConsumableTypes[card_set])
-end
-
-local function ensure_enhanced_deck_consumable_patch()
-    if LOZ_ENHANCED_DECK_CONSUMABLE_PATCHED then
-        return
-    end
-
-    if not Card then
-        return
-    end
-
-    local patched_any = false
-
-    local function wrap_restricted_method(method_name)
-        if not Card[method_name] then
-            return false
-        end
-
-        local base_method = Card[method_name]
-        Card[method_name] = function(self, ...)
-            if not base_method(self, ...) then
-                return false
-            end
-
-            if consumables_locked() and is_consumable_card(self) then
-                return false
-            end
-
-            return true
-        end
-
-        return true
-    end
-
-    patched_any = wrap_restricted_method("can_use_consumeable") or patched_any
-    patched_any = wrap_restricted_method("can_sell_card") or patched_any
-
-    if patched_any then
-        LOZ_ENHANCED_DECK_CONSUMABLE_PATCHED = true
-    end
-end
-
 SMODS.Back{
     key = "expanding_deck",
     atlas = "mod_decks",
@@ -149,7 +59,48 @@ SMODS.Back{
     },
 
     apply = function(self, back)
-        ensure_enhanced_deck_consumable_patch()
+        if not LOZ_ENHANCED_DECK_CONSUMABLE_PATCHED and Card then
+            local function wrap_restricted_method(method_name)
+                if not Card[method_name] then
+                    return false
+                end
+
+                local base_method = Card[method_name]
+                Card[method_name] = function(card, ...)
+                    if not base_method(card, ...) then
+                        return false
+                    end
+
+                    local consumeable_set = card.config and card.config.center and card.config.center.set
+                    local is_consumable =
+                        (card.area and G and G.consumeables and card.area == G.consumeables)
+                        or (card.ability and card.ability.consumeable)
+                        or (consumeable_set and SMODS.ConsumableTypes[consumeable_set])
+
+                    if G
+                        and G.GAME
+                        and G.GAME.blind
+                        and not G.GAME.blind.in_blind
+                        and G.GAME.modifiers
+                        and G.GAME.modifiers.loz_enhanced_deck
+                        and is_consumable
+                    then
+                        return false
+                    end
+
+                    return true
+                end
+
+                return true
+            end
+
+            local use_wrapped = wrap_restricted_method("can_use_consumeable")
+            local sell_wrapped = wrap_restricted_method("can_sell_card")
+
+            if use_wrapped or sell_wrapped then
+                LOZ_ENHANCED_DECK_CONSUMABLE_PATCHED = true
+            end
+        end
 
         G.E_MANAGER:add_event(Event({
             func = function()
@@ -167,9 +118,19 @@ SMODS.Back{
 
                 for i = 1, #G.playing_cards do
                     local playing_card = G.playing_cards[i]
-                    local enhancement_key = poll_starting_modifier(i, "enh")
-                    local seal_key = poll_starting_modifier(i, "seal")
-                    local edition_key = poll_starting_modifier(i, "edition")
+                    local enhancement_key = SMODS.poll_enhancement({
+                        key = "loz_enhanced_enh_" .. i,
+                        guaranteed = true
+                    })
+                    local seal_key = SMODS.poll_seal({
+                        key = "loz_enhanced_seal_" .. i,
+                        guaranteed = true
+                    })
+                    local edition_key = SMODS.poll_edition({
+                        key = "loz_enhanced_edition_" .. i,
+                        guaranteed = true,
+                        no_negative = true
+                    })
 
                     if playing_card and enhancement_key and centers and centers[enhancement_key] then
                         playing_card:set_ability(centers[enhancement_key], nil, true)
