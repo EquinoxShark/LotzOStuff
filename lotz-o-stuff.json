@@ -1,0 +1,8 @@
+{
+  "id": "lotz_o_stuff",
+  "name": "Lotz-O-Stuff",
+  "author": ["EquinoxShark"],
+  "description": "Custom decks and jokers.",
+  "prefix": "loz",
+  "main_file": "main.lua"
+}
