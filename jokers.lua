@@ -1,22 +1,18 @@
-local function has_any_edition(card)
-    return card
-        and card.edition
-        and (
-            card.edition.foil
-            or card.edition.holo
-            or card.edition.polychrome
-            or card.edition.negative
-        )
-end
-
-local function has_negative_edition(card)
-    return card and card.edition and card.edition.negative
-end
-
-local function ensure_negative_edition(card)
-    if not has_negative_edition(card) then
-        card:set_edition("e_negative", true)
+local function get_edition_key(card)
+    local edition = card and card.edition
+    if not edition then
+        return nil
     end
+
+    if edition.key then
+        return edition.key
+    end
+
+    if edition.type then
+        return "e_" .. edition.type
+    end
+
+    return nil
 end
 
 -- Blank Joker
@@ -36,7 +32,7 @@ SMODS.Joker{
     },
 
     calculate = function(self, card, context)
-        if has_any_edition(card) then
+        if get_edition_key(card) ~= nil then
             card:set_edition(nil, true, true)
 
             return {
@@ -59,7 +55,9 @@ SMODS.Joker{
             return
         end
 
-        ensure_negative_edition(preview_card)
+        if get_edition_key(preview_card) ~= "e_negative" then
+            preview_card:set_edition("e_negative", true)
+        end
     end
 }
 
@@ -82,18 +80,7 @@ SMODS.Joker{
     },
 
     in_pool = function(self, args)
-        if not (G and G.jokers and G.jokers.cards) then
-            return false
-        end
-
-        for _, joker in ipairs(G.jokers.cards) do
-            local center = joker.config and joker.config.center
-            if center and center.key == "j_loz_blank_joker" then
-                return true
-            end
-        end
-
-        return false
+        return next(SMODS.find_card("j_loz_blank_joker")) ~= nil
     end,
 
     add_to_deck = function(self, card, from_debuff)
@@ -101,7 +88,9 @@ SMODS.Joker{
             return
         end
 
-        ensure_negative_edition(card)
+        if get_edition_key(card) ~= "e_negative" then
+            card:set_edition("e_negative", true)
+        end
     end,
 
     calculate = function(self, card, context)
@@ -114,7 +103,7 @@ SMODS.Joker{
         if G and G.jokers and G.jokers.cards then
             for _, joker in ipairs(G.jokers.cards) do
                 if joker ~= card
-                and not has_any_edition(joker) then
+                and get_edition_key(joker) == nil then
                     valid_targets[#valid_targets + 1] = joker
                 end
             end
